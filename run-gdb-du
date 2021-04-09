@@ -1,0 +1,9 @@
+#!/bin/bash
+# Handy script for launching a program under gdb, whilst wiring up gdb to use
+# the working copy of gdb-du
+# Typical usage:
+#   ./run-gdb-du python
+PYTHONPATH="$(pwd)" \
+  gdb \
+  --eval-command="python import gdbdu" \
+  --args $*
