@@ -3,13 +3,37 @@ Recursive sizeof for gdb, supporting C++ containers
 
 Inspired by [gdb-heap](https://github.com/rogerhu/gdb-heap) project.
 
-## Usage
+## Example
 
-TODO
+### Build test program
+
+```bash
+make -C test
+```
+
+### Build test program
+
+```gdb
+./run-gdb-du ./test/std-types
+...
+(gdb) break std-types.cpp:36
+Breakpoint 3 at 0x555555556563: file std-types.cpp, line 36.
+(gdb) run
+Starting program: /home/karry/Avast/projects/skyline/gdb-du/test/std-types 
+
+Breakpoint 3, main () at std-types.cpp:36
+36          vec.back().opt = 42;
+(gdb) du /1 vec
+// sizeof: 24
+std::vector<Dummy, std::allocator<Dummy> > [ // vector size: 1, capacity: 1
+ 0: Dummy { ... },
+],
+size: 241
+```
 
 ## Commands
 
 ```gdb
 hexdump <addr> [-c] - print a hexdump, starting at the specific region of memory (expose hex characters with -c option)
-du variable - print recursive variable size
+du [/PRINT_LEVEL_LIMIT] variable - print recursive variable size
 ```
