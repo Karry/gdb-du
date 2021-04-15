@@ -1,5 +1,7 @@
 # gdb-du
-Recursive sizeof for gdb, supporting C++ containers
+Recursive sizeof for gdb, supporting C++ containers. 
+
+It is PoC right now, just basic structures, pointers and `std::vector` is supported!
 
 Inspired by [gdb-heap](https://github.com/rogerhu/gdb-heap) project.
 
@@ -11,7 +13,7 @@ Inspired by [gdb-heap](https://github.com/rogerhu/gdb-heap) project.
 make -C test
 ```
 
-### Build test program
+### Sample output
 
 ```gdb
 ./run-gdb-du ./test/std-types
