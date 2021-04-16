@@ -25,7 +25,7 @@ make -C test
 ((gdb) break std-types.cpp:50
 Breakpoint 1 at 0x269e: file std-types.cpp, line 50.
 (gdb) run
-Starting program: /home/karry/Avast/projects/skyline/gdb-du/test/std-types 
+Starting program: ./test/std-types
 allocated: 73376
 
 Breakpoint 1, main () at std-types.cpp:50
