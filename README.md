@@ -22,19 +22,20 @@ make -C test
 ```gdb
 ./run-gdb-du ./test/std-types
 ...
-(gdb) break std-types.cpp:36
-Breakpoint 3 at 0x555555556563: file std-types.cpp, line 36.
+((gdb) break std-types.cpp:50
+Breakpoint 1 at 0x269e: file std-types.cpp, line 50.
 (gdb) run
 Starting program: /home/karry/Avast/projects/skyline/gdb-du/test/std-types 
+allocated: 73376
 
-Breakpoint 3, main () at std-types.cpp:51
-36          vec.back().opt = 42;
+Breakpoint 1, main () at std-types.cpp:50
+50          vec.back().opt = 42;
 (gdb) du /1 vec
 // sizeof: 24
 std::vector<Dummy, std::allocator<Dummy> > [ // vector size: 1, capacity: 1
  0: Dummy { ... },
 ],
-size: 241
+size: 240
 ```
 
 ## Commands
