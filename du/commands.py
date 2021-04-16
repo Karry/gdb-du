@@ -70,6 +70,23 @@ def du_follow_pointer(v, print_level_limit, level_limit, level, visited_ptrs):
     return size
 
 
+def du_string(s, print_level_limit, level_limit, level, visited_ptrs):
+    indent = ' ' * level
+
+    char_ptr = s['_M_dataplus']['_M_p']
+    local_buff_ptr = s['_M_local_buf']
+    size=0
+    if char_ptr != local_buff_ptr: # see std::string::_M_is_local
+        size = s['_M_allocated_capacity']
+
+    if level < print_level_limit:
+        if size==0:
+            gdb.write('%s %s // stored locally\n' % (s.type, s))
+        else:
+            gdb.write('%s %s // sizeof: %d\n' % (s.type, s, size))
+    return size
+
+
 def du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs):
     indent = ' ' * level
     if level < print_level_limit:
@@ -115,6 +132,9 @@ def du_follow(s, print_level_limit = 3, level_limit = 30, level = 0, visited_ptr
     # known TLS containers
     if str(s.type).startswith('std::vector<'):
         return du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs)
+
+    if str(s.type).startswith('std::string'):
+        return du_string(s, print_level_limit, level_limit, level, visited_ptrs)
 
     # generic container (struct)
     if level < print_level_limit:
@@ -182,7 +202,7 @@ class Du(gdb.Command):
 
         gdb.write('// sizeof: %d\n' % (v.type.sizeof))
         size = v.type.sizeof
-        size += du_follow(v, limit, max(limit, 10), 0, [])
+        size += du_follow(v, limit, max(limit, 64), 0, [])
         gdb.write("size: %s\n" % size)
 
 

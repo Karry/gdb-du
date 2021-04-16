@@ -34,7 +34,7 @@ int main() {
   for (size_t i=0; i<10; i++){
     vec.emplace_back();
     vec.back().opt = 42;
-    vec.back().str = "some text";
+    vec.back().str = i % 2 == 0 ? "some text" : "some text that cannot be stored locally";
     vec.back().set = {1,2,3,4,5,6,7,8,9,10};
     vec.back().stringMap["key1"] = "value1";
     vec.back().stringMap["key2"] = "value2";
