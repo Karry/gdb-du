@@ -27,7 +27,7 @@ Breakpoint 3 at 0x555555556563: file std-types.cpp, line 36.
 (gdb) run
 Starting program: /home/karry/Avast/projects/skyline/gdb-du/test/std-types 
 
-Breakpoint 3, main () at std-types.cpp:36
+Breakpoint 3, main () at std-types.cpp:51
 36          vec.back().opt = 42;
 (gdb) du /1 vec
 // sizeof: 24

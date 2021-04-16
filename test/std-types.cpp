@@ -19,6 +19,11 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <iostream>
+
+#ifdef __GNUC__
+#include <malloc.h>
+#endif
 
 struct Dummy {
   std::optional<long> opt;
@@ -28,10 +33,19 @@ struct Dummy {
   Dummy *ptr = nullptr;
 };
 
+void stat() {
+#ifdef __GNUC__
+  auto info = mallinfo();
+  std::cout << "allocated: " << info.uordblks << std::endl;
+#endif
+}
+
 int main() {
   std::vector<Dummy> vec;
 
   for (size_t i=0; i<10; i++){
+    stat();
+
     vec.emplace_back();
     vec.back().opt = 42;
     vec.back().str = i % 2 == 0 ? "some text" : "some text that cannot be stored locally";
@@ -44,6 +58,8 @@ int main() {
       // store pointer to previous entry
       vec.back().ptr = &vec[i-1];
     }
+
+    stat();
   }
   return 0;
 }
