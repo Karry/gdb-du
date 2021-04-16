@@ -39,6 +39,8 @@ int main() {
     vec.back().stringMap["key1"] = "value1";
     vec.back().stringMap["key2"] = "value2";
     if (i>0) {
+      // avoid future re-allocations
+      vec.reserve(10);
       // store pointer to previous entry
       vec.back().ptr = &vec[i-1];
     }
