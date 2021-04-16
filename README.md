@@ -1,7 +1,7 @@
 # gdb-du
-Recursive sizeof for gdb, supporting C++ containers. 
+Recursive sizeof for gdb, supporting C++ containers (some gnu libstdc++ containers, c++17 abi). 
 
-It is PoC right now, just basic structures, pointers and `std::vector` is supported!
+It is PoC right now, just basic structures, pointers and `std::vector` and `std::string` is supported!
 
 Inspired by [gdb-heap](https://github.com/rogerhu/gdb-heap) project.
 
