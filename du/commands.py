@@ -44,6 +44,14 @@ def is_pointer(v):
     return is_pointer_type(v.type)
 
 
+def get_typedef(type, typeName):
+    if str(type).startswith(typeName):
+        return type
+    if type.code == gdb.TYPE_CODE_TYPEDEF:
+        return get_typedef(gdb.types.get_basic_type(type), typeName)
+    return None
+
+
 def du_follow_pointer(v, print_level_limit, level_limit, level, visited_ptrs):
     indent = ' ' * level
     try:
@@ -86,6 +94,42 @@ def du_string(s, print_level_limit, level_limit, level, visited_ptrs):
             gdb.write('%s %s // sizeof: %d\n' % (s.type, s, size))
     return size
 
+
+def du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs):
+    indent = ' ' * level
+    if level < print_level_limit:
+        gdb.write('%s [' % s.type)
+
+    header_size = s.type.sizeof
+    offset = s['offset']
+    alloc = s['alloc']
+    array_size = s['size']
+
+    # header size is counted already...
+    size = offset - header_size + alloc * element_type.sizeof
+
+    if level < print_level_limit:
+        gdb.write(' // %d elements of %s, extra size: %s\n' % (array_size, element_type, size))
+
+    for i in range(0, array_size):
+        if level < print_level_limit:
+            gdb.write('%s %d: ' % (indent, i))
+        arr = gdb.parse_and_eval('(%s*)(%s + %d)' % (element_type, str(s.address), offset))
+        entry = arr[i]
+        address = str(entry.address)
+        if address in visited_ptrs:
+            if level < print_level_limit:
+                gdb.write(' %s // visited already\n' % address)
+            size -= entry.type.sizeof
+            continue
+        # gdb.write('%s ' % (address))
+        visited_ptrs.append(address)
+        size += du_follow(entry, print_level_limit, level_limit, level+1, visited_ptrs)
+
+
+    if level < print_level_limit:
+        gdb.write('%s],\n' % (indent))
+    return size
 
 def du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs):
     indent = ' ' * level
@@ -139,11 +183,23 @@ def du_follow(s, print_level_limit = 3, level_limit = 30, level = 0, visited_ptr
         gdb.write('%s { ... },\n' % s.type) # last level to print
 
     # known TLS containers
-    if str(s.type).startswith('std::vector<'):
+    if get_typedef(s.type, 'std::vector') != None:
         return du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs)
 
-    if str(s.type).startswith('std::string'):
+    if get_typedef(s.type, 'std::string') != None:
         return du_string(s, print_level_limit, level_limit, level, visited_ptrs)
+
+    # Qt classes
+    qtTypedArrayData = get_typedef(s.type, 'QTypedArrayData')
+    if qtTypedArrayData is not None:
+        element_type = qtTypedArrayData.template_argument(0)
+        return du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs)
+
+    qtArrayData = get_typedef(s.type, 'QArrayData')
+    if qtArrayData is not None:
+        # not sure...
+        element_type = gdb.lookup_type('char')
+        return du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs)
 
     # generic container (struct)
     if level < print_level_limit:
@@ -211,7 +267,7 @@ class Du(gdb.Command):
 
         gdb.write('// sizeof: %d\n' % (v.type.sizeof))
         size = v.type.sizeof
-        size += du_follow(v, limit, max(limit, 64), 0, [])
+        size += du_follow(v, limit, max(limit, 1024), 0, [])
         gdb.write("size: %s\n" % size)
 
 
