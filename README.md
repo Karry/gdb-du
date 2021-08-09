@@ -9,6 +9,19 @@ So, keep in mind that provided values are just estimations.
 
 Inspired by [gdb-heap](https://github.com/rogerhu/gdb-heap) project.
 
+## Init
+
+To load **gdb-du** to gdb session may be done by `run-gdb-du` wrapper script
+or later during debugging.
+
+```gdb
+(gdb) python
+> import sys
+> sys.path.insert(0, os.path.expanduser("<gdb-du checkout directory>"))
+> import gdbdu
+> end
+```
+
 ## Example
 
 ### Build test program
@@ -30,7 +43,7 @@ allocated: 73376
 
 Breakpoint 1, main () at std-types.cpp:50
 50          vec.back().opt = 42;
-(gdb) du /1 vec
+(gdb) du -p 1 vec
 // sizeof: 24
 std::vector<Dummy, std::allocator<Dummy> > [ // vector size: 1, capacity: 1
  0: Dummy { ... },
@@ -41,6 +54,6 @@ size: 240
 ## Commands
 
 ```gdb
-hexdump <addr> [-c] - print a hexdump, starting at the specific region of memory (expose hex characters with -c option)
-du [/PRINT_LEVEL_LIMIT] variable - print recursive variable size
+hexdump [-c] <addr> - print a hexdump, starting at the specific region of memory (expose hex characters with -c option)
+usage: [-h] [-p PRINT_DEPTH] [-c COMPUTE_DEPTH] expr [expr ...] - print recursive variable size
 ```

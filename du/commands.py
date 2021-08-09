@@ -18,6 +18,7 @@
 import gdb
 import re
 import sys
+import argparse
 
 from du import fmt_size, fmt_addr, \
     hexdump_as_bytes
@@ -224,6 +225,11 @@ def du_follow(s, print_level_limit = 3, level_limit = 30, level = 0, visited_ptr
     return size
 
 
+class ErrorCatchingArgumentParser(argparse.ArgumentParser):
+    def exit(self, status=0, message=None):
+        raise Exception('%s' % (message))
+
+
 # Inspired by:
 #   https://stackoverflow.com/questions/16787289/gdb-python-parsing-structures-each-field-and-print-them-with-proper-value-if
 # gdb api documentation:
@@ -231,7 +237,7 @@ def du_follow(s, print_level_limit = 3, level_limit = 30, level = 0, visited_ptr
 #   https://sourceware.org/gdb/onlinedocs/gdb/Types-In-Python.html#Types-In-Python
 class Du(gdb.Command):
     '''
-    du [/PRINT_LEVEL_LIMIT] STRUCT-VALUE
+    du [-d PRINT_LEVEL_LIMIT] STRUCT-VALUE
     '''
     def __init__(self):
         super(Du, self).__init__(
@@ -242,33 +248,31 @@ class Du(gdb.Command):
         arg_list = gdb.string_to_argv(args)
         if len(arg_list) < 1:
             gdb.write("Too few arguments\n")
-        s = args.find('/')
-        if s == -1:
-            (expr, limit) = (args, 3)
-        else:
-            if args[:s].strip():
-                (expr, limit) = (args, 3)
-            else:
-                i = s + 1
-                for (i, c) in enumerate(args[s+1:], s + 1):
-                    if not c.isdigit():
-                        break
-                end = i
-                digits = args[s+1:end]
-                try:
-                    limit = int(digits)
-                except ValueError:
-                    raise gdb.GdbError(Du.__doc__)
-                (expr, limit) = (args[end:], limit)
-        try:
-            v = gdb.parse_and_eval(expr)
-        except gdb.error as e:
-            raise gdb.GdbError(e)
 
-        gdb.write('// sizeof: %d\n' % (v.type.sizeof))
-        size = v.type.sizeof
-        size += du_follow(v, limit, max(limit, 1024), 0, [])
-        gdb.write("size: %s\n" % size)
+        parser = ErrorCatchingArgumentParser(description='Compute memory size of structure.')
+
+        parser.add_argument('-p', '--print-depth=', dest='print_depth', type=int, default=3,
+                            help='print depth (default: 3)')
+        parser.add_argument('-c', '--compute-depth=', dest='compute_depth', type=int, default=1024,
+                            help='compute depth (default: 1024)')
+        parser.add_argument('expression', metavar='expr', type=str, nargs='+',
+                            help='gdb expression (variable)')
+
+        try:
+            pargs = parser.parse_args(arg_list)
+        except Exception:
+            return
+
+        for expr in pargs.expression:
+            try:
+                v = gdb.parse_and_eval(expr)
+            except gdb.error as e:
+                raise gdb.GdbError(e)
+
+            gdb.write('// sizeof(%s): %d\n' % (expr, v.type.sizeof))
+            size = v.type.sizeof
+            size += du_follow(v, pargs.print_depth, pargs.compute_depth, 0, [])
+            gdb.write("size: %s\n" % size)
 
 
 class Hexdump(gdb.Command):
@@ -285,8 +289,8 @@ class Hexdump(gdb.Command):
         chars_only = True
 
         if len(arg_list) == 2:
-            addr_arg = arg_list[0]
-            chars_only = True if args[1] == '-c' else False
+            chars_only = True if args[0] == '-c' else False
+            addr_arg = arg_list[1]
         else:
             addr_arg = args
 
