@@ -19,7 +19,7 @@ import gdb
 import re
 import sys
 import argparse
-
+from . import caching_lookup_type, safe_caching_lookup_type
 
 class DuArgs:
     def __init__(self):
@@ -47,13 +47,16 @@ def is_pointer(v):
     return (v.type.strip_typedefs().code == gdb.TYPE_CODE_PTR)
 
 
-def get_typedef(type, typeName):
-    if type.tag is not None and str(type.tag).startswith(typeName):
+def get_typedef(type, type_name):
+    """ return possible typedef of "type" its name starts with type_name.
+     it may be used for templated types, where it is not possible to use gdb.lookup_type.
+    """
+    if type.tag is not None and str(type.tag).startswith(type_name):
         return type
-    if str(type).startswith(typeName):
+    if str(type).startswith(type_name):
         return type
     if type.code == gdb.TYPE_CODE_TYPEDEF:
-        return get_typedef(gdb.types.get_basic_type(type), typeName)
+        return get_typedef(gdb.types.get_basic_type(type), type_name)
     return None
 
 
@@ -109,7 +112,7 @@ def du_qt_string_data(s, element_type, level, du_args, visited_ptrs):
     # header size is counted already...
     size = offset - header_size + alloc * element_type.sizeof
 
-    char_t = gdb.lookup_type('char')
+    char_t = safe_caching_lookup_type('char')
     char_pt = char_t.pointer()
     arr = (s.address.cast(char_pt) + offset).cast(element_type.pointer())
 
@@ -138,7 +141,7 @@ def du_qt_array_data(s, element_type, level, du_args, visited_ptrs):
     # header size is counted already...
     size = offset - header_size + alloc * element_type.sizeof
 
-    char_pt = gdb.lookup_type('char').pointer()
+    char_pt = safe_caching_lookup_type('char').pointer()
     arr = (s.address.cast(char_pt) + offset).cast(element_type.pointer())
 
     if level < du_args.print_level_limit:
@@ -220,6 +223,9 @@ def du_follow(s, level = 0, du_args = DuArgs, visited_ptrs = []):
     if get_typedef(s.type, 'std::vector') is not None:
         return du_follow_std_vector(s, level, du_args, visited_ptrs)
 
+    if s.type == safe_caching_lookup_type('std::string'):
+        return du_string(s, level, du_args, visited_ptrs)
+
     if get_typedef(s.type, 'std::string') is not None:
         return du_string(s, level, du_args, visited_ptrs)
 
@@ -238,7 +244,7 @@ def du_follow(s, level = 0, du_args = DuArgs, visited_ptrs = []):
     qtArrayData = get_typedef(s.type, 'QArrayData')
     if qtArrayData is not None:
         # not sure about array type, QTypedArrayData should be detected usually...
-        element_type = gdb.lookup_type('char')
+        element_type = safe_caching_lookup_type('char')
         return du_qt_array_data(s, element_type, level, du_args, visited_ptrs)
 
     # generic container (struct)

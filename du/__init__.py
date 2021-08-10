@@ -70,6 +70,12 @@ def caching_lookup_type(typename):
         return gdbtype
     raise RuntimeError('Could not find type "%s"' % typename)
 
+def safe_caching_lookup_type(typename):
+    try:
+        return caching_lookup_type(typename)
+    except RuntimeError:
+        return None
+
 def array_length(_gdbval):
     '''Given a gdb.Value that's an array, determine the number of elements in
     the array'''
