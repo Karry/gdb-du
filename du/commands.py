@@ -109,13 +109,16 @@ def du_qt_array_data(s, element_type, print_level_limit, level_limit, level, vis
     # header size is counted already...
     size = offset - header_size + alloc * element_type.sizeof
 
+    char_pt = gdb.lookup_type('char').pointer()
+    arr = (s.cast(char_pt) + offset).cast(element_type.pointer())
+
     if level < print_level_limit:
         gdb.write(' // %d elements of %s, extra size: %s\n' % (array_size, element_type, size))
 
     for i in range(0, array_size):
         if level < print_level_limit:
             gdb.write('%s %d: ' % (indent, i))
-        arr = gdb.parse_and_eval('(%s*)(%s + %d)' % (element_type, str(s.address), offset))
+
         entry = arr[i]
         address = str(entry.address)
         if address in visited_ptrs:
