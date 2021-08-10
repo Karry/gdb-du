@@ -100,6 +100,31 @@ def du_string(s, level, du_args, visited_ptrs):
     return size
 
 
+def du_qt_string_data(s, element_type, level, du_args, visited_ptrs):
+    header_size = s.type.sizeof
+    offset = s['offset']
+    alloc = s['alloc']
+    array_size = s['size']
+
+    # header size is counted already...
+    size = offset - header_size + alloc * element_type.sizeof
+
+    char_t = gdb.lookup_type('char')
+    char_pt = char_t.pointer()
+    arr = (s.address.cast(char_pt) + offset).cast(element_type.pointer())
+
+    if level < du_args.print_level_limit:
+        gdb.write('%s "' % s.type)
+        for i in range(0, array_size):
+            entry = arr[i]
+            if entry >= 0x20 and entry <= 0x7e:
+                gdb.write('%s' % chr(entry))
+            else:
+                gdb.write('" + QChar(%d) + \"' % entry)
+        gdb.write('" // length: %d, allocated extra size: %s\n' % (array_size, size))
+    return size
+
+
 def du_qt_array_data(s, element_type, level, du_args, visited_ptrs):
     indent = ' ' * level
     if level < du_args.print_level_limit:
@@ -199,7 +224,12 @@ def du_follow(s, level = 0, du_args = DuArgs, visited_ptrs = []):
         return du_string(s, level, du_args, visited_ptrs)
 
     # special handling of Qt containers
+    qtStringData = get_typedef(s.type, 'QString::Data')
     qtTypedArrayData = get_typedef(s.type, 'QTypedArrayData')
+    if qtStringData is not None and qtTypedArrayData is not None:
+        element_type = qtTypedArrayData.template_argument(0)
+        return du_qt_string_data(s, element_type, level, du_args, visited_ptrs)
+
     if qtTypedArrayData is not None:
         # TODO: handle possible pointers in s.type
         element_type = qtTypedArrayData.template_argument(0)
