@@ -192,7 +192,7 @@ def du_follow_std_vector(s, level, du_args, visited_ptrs):
             continue
         # gdb.write('%s ' % (address))
         visited_ptrs.append(address)
-        size += du_follow(entry, du_args.print_level_limit, level_limit, level+1, visited_ptrs)
+        size += du_follow(entry, level+1, du_args, visited_ptrs)
 
     if level < du_args.print_level_limit:
         gdb.write('%s],\n' % (indent))
