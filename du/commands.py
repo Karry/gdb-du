@@ -20,6 +20,14 @@ import re
 import sys
 import argparse
 
+
+class DuArgs:
+    def __init__(self):
+        self.print_level_limit = 3
+        self.level_limit = 30
+        self.follow_static = False
+
+
 from du import fmt_size, fmt_addr, \
     hexdump_as_bytes
 
@@ -35,14 +43,8 @@ def is_container(v):
     return is_container_type(v.type)
 
 
-def is_pointer_type(type):
-    if type.code == gdb.TYPE_CODE_TYPEDEF:
-        return is_pointer_type(gdb.types.get_basic_type(type))
-    return (type.code == gdb.TYPE_CODE_PTR)
-
-
 def is_pointer(v):
-    return is_pointer_type(v.type)
+    return (v.type.strip_typedefs().code == gdb.TYPE_CODE_PTR)
 
 
 def get_typedef(type, typeName):
@@ -53,7 +55,7 @@ def get_typedef(type, typeName):
     return None
 
 
-def du_follow_pointer(v, print_level_limit, level_limit, level, visited_ptrs):
+def du_follow_pointer(v, level, du_args, visited_ptrs):
     indent = ' ' * level
     try:
         v1 = v.dereference()
@@ -61,25 +63,25 @@ def du_follow_pointer(v, print_level_limit, level_limit, level, visited_ptrs):
         if address == '0x0':
             return 0
         if address in visited_ptrs:
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write(' // visited already\n')
             return 0
         visited_ptrs.append(address)
         v1.fetch_lazy()
     except gdb.error as e:
-        if level < print_level_limit:
+        if level < du_args.print_level_limit:
             gdb.write(', (%s)\n' % e)
         return 0
 
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write(' // sizeof: %d\n' % (v1.type.sizeof))
         gdb.write('%s  -> ' % indent)
     size = v1.type.sizeof
-    size += du_follow(v1, print_level_limit, level_limit, level + 1, visited_ptrs)
+    size += du_follow(v1, level + 1, du_args, visited_ptrs)
     return size
 
 
-def du_string(s, print_level_limit, level_limit, level, visited_ptrs):
+def du_string(s, level, du_args, visited_ptrs):
     indent = ' ' * level
 
     char_ptr = s['_M_dataplus']['_M_p']
@@ -88,7 +90,7 @@ def du_string(s, print_level_limit, level_limit, level, visited_ptrs):
     if char_ptr != local_buff_ptr: # see std::string::_M_is_local
         size = s['_M_allocated_capacity']
 
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         if size==0:
             gdb.write('%s %s // stored locally\n' % (s.type, s))
         else:
@@ -96,9 +98,9 @@ def du_string(s, print_level_limit, level_limit, level, visited_ptrs):
     return size
 
 
-def du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs):
+def du_qt_array_data(s, element_type, level, du_args, visited_ptrs):
     indent = ' ' * level
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s [' % s.type)
 
     header_size = s.type.sizeof
@@ -112,32 +114,33 @@ def du_qt_array_data(s, element_type, print_level_limit, level_limit, level, vis
     char_pt = gdb.lookup_type('char').pointer()
     arr = (s.cast(char_pt) + offset).cast(element_type.pointer())
 
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write(' // %d elements of %s, extra size: %s\n' % (array_size, element_type, size))
 
     for i in range(0, array_size):
-        if level < print_level_limit:
+        if level < du_args.print_level_limit:
             gdb.write('%s %d: ' % (indent, i))
 
         entry = arr[i]
         address = str(entry.address)
         if address in visited_ptrs:
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write(' %s // visited already\n' % address)
             size -= entry.type.sizeof
             continue
         # gdb.write('%s ' % (address))
         visited_ptrs.append(address)
-        size += du_follow(entry, print_level_limit, level_limit, level+1, visited_ptrs)
+        size += du_follow(entry, level+1, du_args, visited_ptrs)
 
 
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s],\n' % (indent))
     return size
 
-def du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs):
+
+def du_follow_std_vector(s, level, du_args, visited_ptrs):
     indent = ' ' * level
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s [' % s.type)
 
     start = s['_M_impl']['_M_start'].dereference()
@@ -147,83 +150,91 @@ def du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs)
     vec_size = end.address - start.address
     vec_capacity = storage_end.address - start.address
     size = vec_capacity * start.type.sizeof
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s // vector size: %d, capacity: %d\n' % (indent, vec_size, vec_capacity))
 
     for i in range(0, vec_size):
-        if level < print_level_limit:
+        if level < du_args.print_level_limit:
             gdb.write('%s %d: ' % (indent, i))
         entry = s['_M_impl']['_M_start'][i]
         address = str(entry.address)
         if address in visited_ptrs:
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write(' %s // visited already\n' % address)
             size -= entry.type.sizeof
             continue
         # gdb.write('%s ' % (address))
         visited_ptrs.append(address)
-        size += du_follow(entry, print_level_limit, level_limit, level+1, visited_ptrs)
+        size += du_follow(entry, du_args.print_level_limit, level_limit, level+1, visited_ptrs)
 
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s],\n' % (indent))
     return size
 
 
-def du_follow(s, print_level_limit = 3, level_limit = 30, level = 0, visited_ptrs = []):
+def du_follow(s, level = 0, du_args = DuArgs, visited_ptrs = []):
     indent = ' ' * level
 
     # TODO: handle s.dynamic_type
 
     if not is_container(s):
-        if level < print_level_limit:
+        if level < du_args.print_level_limit:
             gdb.write('%s\n' % s)
         return 0
 
-    if level >= level_limit:
+    if level >= du_args.level_limit:
         gdb.write("!! limit reached\n")
         return 0 # don't go deeper!
 
-    if level == print_level_limit:
+    if level == du_args.print_level_limit:
         gdb.write('%s { ... },\n' % s.type) # last level to print
 
     # known TLS containers
-    if get_typedef(s.type, 'std::vector') != None:
-        return du_follow_std_vector(s, print_level_limit, level_limit, level, visited_ptrs)
+    if get_typedef(s.type, 'std::vector') is not None:
+        return du_follow_std_vector(s, level, du_args, visited_ptrs)
 
-    if get_typedef(s.type, 'std::string') != None:
-        return du_string(s, print_level_limit, level_limit, level, visited_ptrs)
+    if get_typedef(s.type, 'std::string') is not None:
+        return du_string(s, level, du_args, visited_ptrs)
 
     # Qt classes
     qtTypedArrayData = get_typedef(s.type, 'QTypedArrayData')
     if qtTypedArrayData is not None:
         element_type = qtTypedArrayData.template_argument(0)
-        return du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs)
+        return du_qt_array_data(s, element_type, level, du_args, visited_ptrs)
 
     qtArrayData = get_typedef(s.type, 'QArrayData')
     if qtArrayData is not None:
         # not sure...
         element_type = gdb.lookup_type('char')
-        return du_qt_array_data(s, element_type, print_level_limit, level_limit, level, visited_ptrs)
+        return du_qt_array_data(s, element_type, level, du_args, visited_ptrs)
 
     # generic container (struct)
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s {\n' % s.type)
 
     size = 0
     for k in s.type.fields():
         v = s[k]
         if is_pointer(v):
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write('%s %s: %s' % (indent, k.name, v))
-            size += du_follow_pointer(v, print_level_limit, level_limit, level, visited_ptrs)
+            size += du_follow_pointer(v, level, du_args, visited_ptrs)
+        elif hasattr(k, 'enumval'):
+            if level < du_args.print_level_limit:
+                gdb.write('%s %s: %s, // enumval\n' % (indent, k.name, v))
+        elif not hasattr(k, 'bitpos'): # static
+            if level < du_args.print_level_limit:
+                gdb.write('%s static %s: %s\n' % (indent, k.name, v))
+            if v.address is not None and du_args.follow_static:
+                size += du_follow_pointer(v.address, level, du_args, visited_ptrs)
         elif is_container(v):
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write('%s %s: ' % (indent, k.name))
-            size += du_follow(v, print_level_limit, level_limit, level + 1, visited_ptrs)
+            size += du_follow(v, level + 1, du_args, visited_ptrs)
         else:
-            if level < print_level_limit:
+            if level < du_args.print_level_limit:
                 gdb.write('%s %s: %s,\n' % (indent, k.name, v))
-    if level < print_level_limit:
+    if level < du_args.print_level_limit:
         gdb.write('%s},\n' % (indent))
     return size
 
@@ -258,6 +269,8 @@ class Du(gdb.Command):
                             help='print depth (default: 3)')
         parser.add_argument('-c', '--compute-depth=', dest='compute_depth', type=int, default=1024,
                             help='compute depth (default: 1024)')
+        parser.add_argument('-s', '--static', dest='follow_static', default=False, action='store_true',
+                            help='follow static fields (default is false)')
         parser.add_argument('expression', metavar='expr', type=str, nargs='+',
                             help='gdb expression (variable)')
 
@@ -274,7 +287,12 @@ class Du(gdb.Command):
 
             gdb.write('// sizeof(%s): %d\n' % (expr, v.type.sizeof))
             size = v.type.sizeof
-            size += du_follow(v, pargs.print_depth, pargs.compute_depth, 0, [])
+
+            du_args = DuArgs
+            du_args.print_level_limit = pargs.print_depth
+            du_args.level_limit = pargs.compute_depth
+            du_args.follow_static = pargs.follow_static
+            size += du_follow(v, 0, du_args, [])
             gdb.write("size: %s\n" % size)
 
 
