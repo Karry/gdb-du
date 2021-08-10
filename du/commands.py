@@ -48,6 +48,8 @@ def is_pointer(v):
 
 
 def get_typedef(type, typeName):
+    if type.tag is not None and str(type.tag).startswith(typeName):
+        return type
     if str(type).startswith(typeName):
         return type
     if type.code == gdb.TYPE_CODE_TYPEDEF:
@@ -112,10 +114,10 @@ def du_qt_array_data(s, element_type, level, du_args, visited_ptrs):
     size = offset - header_size + alloc * element_type.sizeof
 
     char_pt = gdb.lookup_type('char').pointer()
-    arr = (s.cast(char_pt) + offset).cast(element_type.pointer())
+    arr = (s.address.cast(char_pt) + offset).cast(element_type.pointer())
 
     if level < du_args.print_level_limit:
-        gdb.write(' // %d elements of %s, extra size: %s\n' % (array_size, element_type, size))
+        gdb.write(' // %d elements of %s, starts at %s (allocated extra size: %s)\n' % (array_size, element_type, str(arr), size))
 
     for i in range(0, array_size):
         if level < du_args.print_level_limit:
@@ -196,15 +198,16 @@ def du_follow(s, level = 0, du_args = DuArgs, visited_ptrs = []):
     if get_typedef(s.type, 'std::string') is not None:
         return du_string(s, level, du_args, visited_ptrs)
 
-    # Qt classes
+    # special handling of Qt containers
     qtTypedArrayData = get_typedef(s.type, 'QTypedArrayData')
     if qtTypedArrayData is not None:
+        # TODO: handle possible pointers in s.type
         element_type = qtTypedArrayData.template_argument(0)
         return du_qt_array_data(s, element_type, level, du_args, visited_ptrs)
 
     qtArrayData = get_typedef(s.type, 'QArrayData')
     if qtArrayData is not None:
-        # not sure...
+        # not sure about array type, QTypedArrayData should be detected usually...
         element_type = gdb.lookup_type('char')
         return du_qt_array_data(s, element_type, level, du_args, visited_ptrs)
 
